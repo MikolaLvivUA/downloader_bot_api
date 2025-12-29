@@ -1,6 +1,6 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { Ctx, Hears, On, Update, Next } from 'nestjs-telegraf';
-import { Context } from 'telegraf';
+import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import { Telegraf, Context, session } from 'telegraf';
+import { ConfigService } from '@nestjs/config';
 import { LinksRegExEnum } from './enums/links-regEx.enum';
 import { InstagramApiService } from '../instagram-api/instagram-api.service';
 import { TikTokApiService } from '../tiktok-api/tiktok-api.service';
@@ -9,23 +9,65 @@ import { DownloadFailedException } from '../common/exceptions/download-failed.ex
 import { PrivateContentException } from '../common/exceptions/private-content.exception';
 
 @Injectable()
-@Update()
-export class TelegramApiService {
+export class TelegramApiService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(TelegramApiService.name);
+  private bot: Telegraf;
 
   constructor(
     private readonly instagramService: InstagramApiService,
     private readonly tiktokService: TikTokApiService,
-  ) {}
-
-  @On('my_chat_member')
-  async onBotInvited(@Ctx() ctx: Context) {
-    console.log('bot invited:', JSON.stringify((ctx as any).update));
-    console.log('bot invited');
+    private readonly configService: ConfigService,
+  ) {
+    const token = this.configService.get<string>('TELEGRAM_BOT_TOKEN');
+    if (!token) {
+      throw new Error('TELEGRAM_BOT_TOKEN is not defined');
+    }
+    this.bot = new Telegraf(token);
+    this.setupMiddleware();
   }
 
-  @Hears(new RegExp(LinksRegExEnum.INSTAGRAM_LINK_REGEX, 'i'))
-  async onInstagramMessage(@Ctx() ctx: Context, @Next() next: () => Promise<void>) {
+  private setupMiddleware(): void {
+    this.bot.use(session());
+  }
+
+  async onModuleInit(): Promise<void> {
+    this.logger.log('Initializing Telegram bot...');
+    this.registerHandlers();
+    await this.bot.launch({ dropPendingUpdates: true });
+    this.logger.log('Telegram bot started successfully');
+  }
+
+  async onModuleDestroy(): Promise<void> {
+    this.logger.log('Stopping Telegram bot...');
+    await this.bot.stop('SIGTERM');
+    this.logger.log('Telegram bot stopped');
+  }
+
+  private registerHandlers(): void {
+    // Bot invitation handler
+    this.bot.on('my_chat_member', (ctx) => {
+      this.logger.log('bot invited:', JSON.stringify(ctx.update));
+      this.logger.log('bot invited');
+    });
+
+    // Instagram link handler
+    this.bot.hears(
+      new RegExp(LinksRegExEnum.INSTAGRAM_LINK_REGEX, 'i'),
+      async (ctx, next) => {
+        await this.handleInstagramMessage(ctx, next);
+      }
+    );
+
+    // TikTok link handler
+    this.bot.hears(
+      new RegExp(LinksRegExEnum.TIKTOK_LINK_REGEX, 'i'),
+      async (ctx, next) => {
+        await this.handleTikTokMessage(ctx, next);
+      }
+    );
+  }
+
+  private async handleInstagramMessage(ctx: Context, next: () => Promise<void>): Promise<void> {
     const messageText = (ctx.message as any)?.text;
     if (!messageText) return next();
 
@@ -54,8 +96,7 @@ export class TelegramApiService {
     }
   }
 
-  @Hears(new RegExp(LinksRegExEnum.TIKTOK_LINK_REGEX, 'i'))
-  async onTikTokMessage(@Ctx() ctx: Context, @Next() next: () => Promise<void>) {
+  private async handleTikTokMessage(ctx: Context, next: () => Promise<void>): Promise<void> {
     const messageText = (ctx.message as any)?.text;
     if (!messageText) return next();
 
