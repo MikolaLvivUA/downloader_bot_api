@@ -2,6 +2,7 @@ export interface MediaData {
   url: string;
   type: 'photo' | 'video';
   thumbnail?: string;
+  caption?: string;
 }
 
 export interface DownloadResult {

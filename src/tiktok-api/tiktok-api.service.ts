@@ -55,7 +55,7 @@ export class TikTokApiService {
     if (result.result) {
       const data = result.result;
 
-      // Handle video - prefer HD over SD, avoid watermark
+      // Handle video - prefer SD over HD, avoid watermark
       const videoUrl = data.videoSD || data.videoHD;
 
       if (videoUrl) {

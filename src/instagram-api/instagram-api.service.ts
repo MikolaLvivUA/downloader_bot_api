@@ -56,13 +56,17 @@ export class InstagramApiService {
   private parseInstagramResponse(result: any): MediaData[] {
     const media: MediaData[] = [];
 
-    // instagram-url-direct returns { url_list: string[], thumbnail?: string }
+    // Extract caption from post_info if available
+    const caption = result.post_info?.caption || undefined;
+
+    // instagram-url-direct returns { url_list: string[], thumbnail?: string, post_info: { caption, ... } }
     if (result.url_list && Array.isArray(result.url_list)) {
       for (const mediaUrl of result.url_list) {
         media.push({
           url: mediaUrl,
           type: this.determineMediaTypeFromUrl(mediaUrl),
           thumbnail: result.thumbnail,
+          caption: caption,
         });
       }
     }

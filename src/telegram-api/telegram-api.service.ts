@@ -85,21 +85,33 @@ export class TelegramApiService {
   private async sendMediaToChat(ctx: Context, media: MediaData[]): Promise<void> {
     try {
       if (media.length === 1) {
-        // Single media
+        // Single media - send with caption as reply to original message
         const item = media[0];
+        const options: any = {
+          ...(ctx.message?.message_id && {
+            reply_parameters: { message_id: ctx.message.message_id }
+          }),
+          ...(item.caption && { caption: item.caption })
+        };
+
         if (item.type === 'photo') {
-          await ctx.replyWithPhoto({ url: item.url });
+          await ctx.replyWithPhoto({ url: item.url }, options);
         } else {
-          await ctx.replyWithVideo({ url: item.url });
+          await ctx.replyWithVideo({ url: item.url }, options);
         }
       } else {
-        // Multiple media (carousel)
-        const mediaGroup = media.map((item) => ({
+        // Multiple media - media group with caption on the first item
+        const mediaGroup = media.map((item, index) => ({
           type: item.type,
           media: { url: item.url },
+          ...(index === 0 && item.caption && { caption: item.caption })
         }));
 
-        await ctx.replyWithMediaGroup(mediaGroup as any);
+        const replyOptions = ctx.message?.message_id
+          ? { reply_parameters: { message_id: ctx.message.message_id } }
+          : {};
+
+        await ctx.replyWithMediaGroup(mediaGroup, replyOptions);
       }
     } catch (error) {
       this.logger.error('Error sending media to chat', error);
